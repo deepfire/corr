@@ -16,8 +16,8 @@ let
 
   youtrack-src-github = pkgs.fetchgit {
     url    = https://github.com/deepfire/youtrack;
-    rev    = "39eebdc7540183da75f97021a18418e9b67fbb77";
-    sha256 = "0lc22d68zgpk38q67gm013pzi3d9n2imp7y2kfvsjcslxigygci9";
+    rev    = "f0e43e05b867c82218d386f829af096977c740b0";
+    sha256 = "0zajwkxxg41vayga8l5m4f8xw2xwfa8igg2jsk6rlgkrxxkraxdf";
   };
   youtrack-src-local  = ../youtrack;
 
@@ -27,7 +27,7 @@ let
     in with new; parent // {
       youtrack = new.mkDerivation {
         pname = "youtrack";
-        version = "0.0.6";
+        version = "0.0.7";
         src = if !localYT then youtrack-src-github else youtrack-src-local;
         libraryHaskellDepends = [
           aeson base base-unicode-symbols bytestring HsOpenSSL http-client
