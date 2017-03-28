@@ -4,8 +4,8 @@ synopsis:            Correlate JetBrains Youtrack issues and git branches.
 license:             GPL-3
 license-file:        LICENSE
 author:              Kosyrev Serge
-maintainer:          skosyrev@ptsecurity.com
-copyright:           Copyright (c) 2016 Kosyrev Serge
+maintainer:          kosyrev.serge@protonmail.com
+copyright:           Copyright (c) 2016-2017 Kosyrev Serge
 category:            Database
 build-type:          Simple
 cabal-version:       >=1.10
