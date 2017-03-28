@@ -1,0 +1,65 @@
+* What
+  [[https://travis-ci.org/deepfire/corr/][https://api.travis-ci.org/deepfire/corr.svg?branch=master]]
+
+  /corr/ is an interactive console application that ties a Youtrack instance and a
+  Git repository, to provide certain functionality in its =corr ui= mode:
+
+    - correlate Git branches and YouTrack issues
+    - interactively & incrementally query issues and observe their comments
+    - post issue comments
+
+  A separate mode, called =corr exec= allows to execute Youtrack commands.
+
+  Still separate is a =ghci= integration, allowing interactive exploration of
+  Youtrack objects.
+
+* Installation, using Nix
+
+  1. Install Nix:
+
+      bash <(curl https://nixos.org/nix/install)
+
+     If security implications of this particular step worry you, please read the
+     following piece by Domen Kožar:
+     https://www.domenkozar.com/2015/09/27/friends-sometimes-let-friends-curl-to-shell/)
+
+  2. Obtain & build corr:
+
+     : git clone https://github.com/deepfire/corr
+     : cd corr
+     : nix-env --no-build-output --cores 4 -iE 'f: (import ./. {})'
+
+  3. Validate:
+
+     : corr --help
+
+* Setup
+
+  1. Secure connection (none other is provided) requires SSL certificate of the
+     Youtrack server (=someserver.crt=).
+
+  2. A secret corresponding to the server/user name pair must be provided by the
+     means of =~/.authinfo= (yes, it's far from ideal):
+
+    : machine youtrack.server.hostname login username password password
+
+* Usage
+
+  =corr= *connection parameters* can be specified either via its command line, or
+  by =~/.corrc=, which is updated after first successful connection.
+
+  Mandatory *connection parameters*:
+
+    - =--server=      :: YouTrack server hostname
+    - =--rest-prefix= :: REST-service prefix (typically "/rest")
+    - =--login=       :: user name
+    - =--cacert=      :: server SSL certificate (=someserver.crt=)
+    - =--project=     :: YouTrack project alias
+
+*** corr exec
+
+*** corr report
+
+*** corr ui
+
+*** ghci
