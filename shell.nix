@@ -16,8 +16,8 @@ let
 
   youtrack-src-github = pkgs.fetchgit {
     url    = https://github.com/deepfire/youtrack;
-    rev    = "f0e43e05b867c82218d386f829af096977c740b0";
-    sha256 = "0zajwkxxg41vayga8l5m4f8xw2xwfa8igg2jsk6rlgkrxxkraxdf";
+    rev    = "9804e1aa774f664d59660afeec3c3df65a18dec7";
+    sha256 = "06cdcanfck56w52fbzw49v7sh1g972xgpm9ps8bzk8kps4mryx0f";
   };
   youtrack-src-local  = ../youtrack;
 
@@ -25,14 +25,16 @@ let
     overrides = with haskell.lib; new: old:
     let parent = (oldArgs.overrides or (_: _: {})) new old;
     in with new; parent // {
+      unicode-show = dontCheck old.unicode-show;
       youtrack = new.mkDerivation {
         pname = "youtrack";
-        version = "0.0.7";
+        version = "0.0.8";
         src = if !localYT then youtrack-src-github else youtrack-src-local;
         libraryHaskellDepends = [
-          aeson base base-unicode-symbols bytestring HsOpenSSL http-client
-          http-client-openssl lens mtl parsers QuickCheck safe scientific split text time trifecta
-          unordered-containers utf8-string vector wreq
+          aeson base base-unicode-symbols bytestring
+          HsOpenSSL http-client http-client-openssl lens mtl optparse-applicative
+          parsers pretty-show QuickCheck safe scientific split text split time trifecta
+          unicode-show unordered-containers utf8-string vector wreq
         ];
         homepage = "https://github.com/deepfire/youtrack";
         description = "Access a Jetbrains YouTrack instance";

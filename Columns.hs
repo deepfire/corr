@@ -166,7 +166,7 @@ instance Column    TCreated   where
 
 data TUpdated    = SUpdated   deriving (Show)
 instance Column    TUpdated   where
-    type Field     TUpdated       = LocalTime
+    type Field     TUpdated       = Maybe LocalTime
     column_info    SUpdated       = ColumnInfo "Updated" 18 LT (Just "updated")
     render_field'  SUpdated       = show ∘ issue_updated ∘ work_issue
     work_field     SUpdated       = issue_updated ∘ work_issue

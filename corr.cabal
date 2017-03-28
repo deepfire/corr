@@ -45,5 +45,5 @@ executable corr
                      , utf8-string >=1.0
                      , vector >=0.11
                      , vty >= 5.0
-                     , youtrack >= 0.0.6
+                     , youtrack >= 0.0.8
                      , wreq >= 0.4
