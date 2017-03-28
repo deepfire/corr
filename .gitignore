@@ -1,0 +1,17 @@
+*~
+\#*
+.\#*
+.~*
+*.o
+*.o_p
+*.hi
+*.dyn*
+*.swp
+
+.stack-work/
+cabal-dev/
+dist/
+Setup.hs
+nohup.out
+
+*.csv
