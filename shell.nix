@@ -38,7 +38,7 @@ let
         ];
         homepage = "https://github.com/deepfire/youtrack";
         description = "Access a Jetbrains YouTrack instance";
-        license = stdenv.lib.licenses.gpl3;
+        license = pkgs.stdenv.lib.licenses.gpl3;
       };
     };
   });
