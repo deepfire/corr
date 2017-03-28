@@ -27,7 +27,7 @@
 
      : git clone https://github.com/deepfire/corr
      : cd corr
-     : nix-env --no-build-output --cores 4 -iE 'f: (import ./. {})'
+     : nix-env --no-build-output --cores 4 -iE 'f: (import ./shell.nix {})'
 
   3. Validate:
 
