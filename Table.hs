@@ -22,10 +22,11 @@ module Table
   , tableSelRowIx
   , tableSelColIx
   , tableVisibleRows
-  -- * Construction, filtering, rendering
+  -- * Construction, filtering, rendering, event handling
   , table
   , tableSetSrcRows
   , tableSetVisibilityFilter
+  , handleEventTable
   , renderTable
   -- * Getting a table's current value
   , tableSelectedRow
@@ -89,10 +90,10 @@ class (Default col, Eq col) ⇒ Fieldy row col | col → row where
 
 -- * Table to bind them all
 
-data Table row col
+data Table n row col
     = Fieldy row col ⇒
       Table
-          { tableName             ∷ Name                        -- ^ The table name
+          { tableName             ∷ n                           -- ^ The table name
           , tableOrder            ∷ Ordering                    -- ^ Sort ordering.  EQ ≡ GT
           , tableSrcRows          ∷ !(V.Vector row)  -- listElements
           , tableCols             ∷ [(String, Int, col)]        -- ^ The table column labels, widths (negative/positive
@@ -106,12 +107,12 @@ makePrisms ''Table
 
 -- | Create a table.
 table ∷ Fieldy row col
-       ⇒ Name                 -- ^ The table name -- a basis for viewport names in the table if desired
+       ⇒ n                    -- ^ The table name -- a basis for viewport names in the table if desired
        → [(String, Int, col)] -- ^ The column labels and values to use
        → col
        → (row → Bool)
        → [row]
-       → Table row col
+       → Table n row col
 table name cols defcol vis_filter xs =
     let xs'    = V.fromList ∘ snd ∘ order_rows True defcol Nothing $ xs
         scix   = flip fromMaybe (findIndex ((≡ defcol) ∘ (^._3)) cols)
@@ -137,40 +138,39 @@ order_rows field_switch col orderchoice rows =
     in (order
        ,sortBy comparator rows)
 
-instance Fieldy row col ⇒ HandleEvent (Table row col) where
-    handleEvent (EvKey key []) prew =
-        let field_switched   = key ≡ KChar '\t'
-            (reorder, w)     = case key of
-                                 KChar '\t' → (True,  prew & nextColumnBy 1)
-                                 KBackTab   → (True,  prew & nextColumnBy (-1))
-                                 KChar '<'  → (True,  prew { tableOrder = LT })
-                                 KChar '>'  → (True,  prew { tableOrder = GT })
-                                 _          → (False, prew)
-            (order, datavec) = (id *** V.fromList) ∘ order_rows field_switched (tableSelectedColumn w) (Just $ tableOrder w)
-                               $ V.toList $ tableSrcRows w
-            w'               = tableSetVisibilityFilter (tableVisibilityFilter w) $
-                               w { tableOrder   = order
-                                 , tableSrcRows = datavec }
-        in if | reorder   → pure w'
-              | otherwise →
-                  case key of
-                    KUp          → pure $ w' & tableMoveUp
-                    KDown        → pure $ w' & tableMoveDown
-                    KHome        → pure $ w' & tableMoveTo 0
-                    KEnd         → pure $ w' & tableMoveTo (length $ tableVisibleRows w')
-                    KPageDown    → do mvport ← lookupViewport $ tableName w'
-                                      case mvport of
-                                        Nothing → pure w'
-                                        Just v  → pure $ tableMoveBy (v^.vpSize._2) w'
-                    KPageUp      → do mvport ← lookupViewport $ tableName w'
-                                      case mvport of
-                                        Nothing → pure w'
-                                        Just v  → pure $ tableMoveBy (negate $ v^.vpSize._2) w'
-                    _            → pure w'
-    handleEvent _ w = pure w
+handleEventTable (VtyEvent (EvKey key [])) prew =
+    let field_switched   = key ≡ KChar '\t'
+        (reorder, w)     = case key of
+                             KChar '\t' → (True,  prew & nextColumnBy 1)
+                             KBackTab   → (True,  prew & nextColumnBy (-1))
+                             KChar '<'  → (True,  prew { tableOrder = LT })
+                             KChar '>'  → (True,  prew { tableOrder = GT })
+                             _          → (False, prew)
+        (order, datavec) = (id *** V.fromList) ∘ order_rows field_switched (tableSelectedColumn w) (Just $ tableOrder w)
+                           $ V.toList $ tableSrcRows w
+        w'               = tableSetVisibilityFilter (tableVisibilityFilter w) $
+                           w { tableOrder   = order
+                             , tableSrcRows = datavec }
+    in if | reorder   → pure w'
+          | otherwise →
+              case key of
+                KUp          → pure $ w' & tableMoveUp
+                KDown        → pure $ w' & tableMoveDown
+                KHome        → pure $ w' & tableMoveTo 0
+                KEnd         → pure $ w' & tableMoveTo (length $ tableVisibleRows w')
+                KPageDown    → do mvport ← lookupViewport $ tableName w'
+                                  case mvport of
+                                    Nothing → pure w'
+                                    Just v  → pure $ tableMoveBy (v^.vpSize._2) w'
+                KPageUp      → do mvport ← lookupViewport $ tableName w'
+                                  case mvport of
+                                    Nothing → pure w'
+                                    Just v  → pure $ tableMoveBy (negate $ v^.vpSize._2) w'
+                _            → pure w'
+handleEventTable _ w = pure w
 
 -- | Render a table
-renderTable ∷ Fieldy row col ⇒ Table row col → Widget
+renderTable ∷ (Ord n, Show n) ⇒ Fieldy row col ⇒ Table n row col → Widget n
 renderTable Table{..} =
     let render_column_header_button (idx, (coltitle, width_spec, _)) =
             let isselected = idx == tableSelColIx
@@ -229,30 +229,30 @@ tableRowSelectedAttr    = tableRowAttr <> "selected"    -- ^ The attribute for t
 tableColumnAttr         = "column"                      -- ^ The default attribute for all table columns
 tableColumnSelectedAttr = tableColumnAttr <> "selected" -- ^ The attribute for the selected table column (extends 'tableAttr')
 
-tableSetSrcRows ∷ V.Vector row → Table row col → Table row col
+tableSetSrcRows ∷ V.Vector row → Table n row col → Table n row col
 tableSetSrcRows rows w@Table{..} = tableSetVisibilityFilter tableVisibilityFilter $
                                    w { tableSrcRows  = rows
                                      , tableSelRowIx = if length rows > 0
                                                        then Just 0 else Nothing }
 
-tableSetVisibilityFilter ∷ (row → Bool) → Table row col → Table row col
+tableSetVisibilityFilter ∷ (row → Bool) → Table n row col → Table n row col
 tableSetVisibilityFilter row_filter w@Table{..} =
     let visible_rows = V.filter row_filter tableSrcRows
     in w { tableVisibilityFilter = row_filter
          , tableVisibleRows      = visible_rows
          , tableSelRowIx         = fmap (clamp 0 $ length visible_rows) $ tableSelRowIx }
 
-nextColumnBy ∷ Int → Table row col → Table row col
+nextColumnBy ∷ Int → Table n row col → Table n row col
 nextColumnBy amt w@Table{..} =
     let numColumns = length tableCols
     in if numColumns ≡ 0 then w
        else w { tableSelColIx = (tableSelColIx + amt) `mod` numColumns }
 
-tableMoveUp, tableMoveDown ∷ Table r c → Table r c
+tableMoveUp, tableMoveDown ∷ Table n r c → Table n r c
 tableMoveUp   = tableMoveBy (-1)
 tableMoveDown = tableMoveBy 1
 
-tableMoveBy ∷ Int → Table r c → Table r c
+tableMoveBy ∷ Int → Table n r c → Table n r c
 tableMoveBy n w =
     let nrows     = length $ tableVisibleRows w
         xselected = fmap (clamp 0 (nrows - 1) ∘ (+ n)) $ tableSelRowIx w
@@ -261,7 +261,7 @@ tableMoveBy n w =
 
 -- | Set the selected index for a list to the specified index, subject
 -- to validation.
-tableMoveTo ∷ Int → Table r c → Table r c
+tableMoveTo ∷ Int → Table n r c → Table n r c
 tableMoveTo x w =
     let nrows     = length $ tableVisibleRows w
         xto       = if x < 0 then nrows - x else x
@@ -272,9 +272,9 @@ tableMoveTo x w =
 -- | Obtain the value associated with the table's currently-selected
 -- button, if any. This function is probably what you want when someone
 -- presses 'Enter' in a table.
-tableSelectedColumn ∷ Table row col → col
+tableSelectedColumn ∷ Table n row col → col
 tableSelectedColumn Table{..} =
     (tableCols !! tableSelColIx) ^. _3
 
-tableSelectedRow ∷ Table row col → Maybe row
+tableSelectedRow ∷ Table n row col → Maybe row
 tableSelectedRow Table{..} = fmap (tableVisibleRows V.!) tableSelRowIx

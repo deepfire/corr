@@ -24,6 +24,8 @@
 
 module Molecule
     ( Address(..), AFOf, IsAF
+    , Name(..)
+    , EventM, HandleEvent(..)
     , KeySpec(..)
     , Molecule, Mol(..), MolF(..)
     , Atom(..), Atm(..),  AtmF(..)
@@ -66,8 +68,10 @@ import           Brick.Widgets.Core                  ( str
 import           Supplementary
 
 
+-- | Address family
 class (Eq af, Generic af, Hashable af, Ord af, Show af) ⇒ IsAF af
 
+-- | An address is either a point ('APt') in some space, or a vector ('AVec')
 data Address af
     = APt  { aPt  ∷ af }
     | AVec { aPt  ∷ af
@@ -79,9 +83,7 @@ type family AFOf x ∷ *
 data AtmF af = ∀ a. (Atom a, af ~ AFOf a) ⇒ AtmF a
 
 
-deriving instance Generic VT.Key
 deriving instance Hashable VT.Key
-deriving instance Generic  VT.Modifier
 deriving instance Hashable VT.Modifier
 
 data KeySpec
@@ -111,6 +113,8 @@ data                          MolF =   ∀ mol a. Molecule mol a ⇒ MolF mol
 
 type instance AFOf (Mol x) = x
 
+newtype Name = Name String deriving (Eq, Ord, Show)
+
 data Mol af where
      Mol ∷ IsAF af ⇒
           { molecule_title          ∷ String
@@ -136,10 +140,10 @@ molecule molecule_title (molecule_key_prev, molecule_key_next) molecule_needs_vi
         _molecule_log        = []
     in MolF $ Mol{..}
 
-molecule_draw ∷ ∀ mol a. Molecule mol a ⇒ mol → [B.Widget]
+molecule_draw ∷ ∀ mol a. Molecule mol a ⇒ mol → [B.Widget Name]
 molecule_draw mol@Mol{..} =
     case molecule_popup of
-         Nothing  → []
+         Nothing           → []
          Just (title, msg) → [ B.vCenter ∘ B.hCenter ∘ vLimit (3 + length msg) ∘ hLimit 100
                              ∘ B.borderWithLabel (str $ "  " <> title <> "  ") $ vBox $ fmap str msg ]
     <>
@@ -155,13 +159,19 @@ _logf     logstr (MolF x)      = MolF $ _log logstr x
 _logf_new logstr (MolF x)      = MolF $ _log_new logstr x
 
 
+type EventM a = B.EventM Name a
+
+class HandleEvent a where
+  handleEvent ∷ B.BrickEvent Name VT.Event → a → EventM a
+
+
 data Reaction af r                                         -- It's handy that this is polymorphic on the second argument.
     = Update r
     | Change r
     | Disappear r
-    | Spawn Ordering (B.EventM r)
+    | Spawn Ordering (EventM r)
     | UpdateAt (Address af) r
-    | PushMolecule (B.EventM MolF)
+    | PushMolecule (EventM MolF)
 
 instance Show (Address af) ⇒ Show (Reaction af r) where
     show (Update _)       = "Update"
@@ -171,27 +181,27 @@ instance Show (Address af) ⇒ Show (Reaction af r) where
     show (UpdateAt a _)   = "UpdateAt " <> show a
     show (PushMolecule _) = "PushMolecule"
 
-type Handler af atom = Mol af → VT.Event → atom → B.EventM [Reaction af (AtmF af)]
+type Handler af atom = Mol af → B.BrickEvent Name VT.Event → atom → EventM [Reaction af (AtmF af)]
 
 data Atm a = Atm a deriving Functor
 class ( a ~ Atm (Data a, Widget a)
+      , HandleEvent (Widget a)
       , Typeable a
-      , IsAF (AFOf a)
-      , B.HandleEvent (Widget a) )
+      , IsAF (AFOf a) )
     ⇒ Atom a where
     type Data         a ∷ * -- ^ Data being represented
     type Widget       a ∷ * -- ^ Means of representation
     -- should the state be compartmentalised?
     derive_atom          ∷ Data a → a
-    atom_event_filter    ∷ a → Bool → VT.Event → Bool
-    atom_handle_event_w  ∷ VT.Event → a → B.EventM a
+    atom_event_filter    ∷ a → Bool → B.BrickEvent Name VT.Event → Bool
+    atom_handle_event_w  ∷ B.BrickEvent Name VT.Event → a → EventM a
     atom_handlers        ∷ a → [(KeySpec, Handler (AFOf a) a, String)]
     atom_focus           ∷ a → Ordering → a
     atom_unfocus         ∷ a → a
-    render_atom          ∷ Bool → a → B.Widget
+    render_atom          ∷ Bool → a → B.Widget Name
     --
     atom_event_filter      _ focused _ = focused
-    atom_handle_event_w ev (Atm (d, w)) = Atm ∘ (d,) <$> B.handleEvent ev w
+    atom_handle_event_w ev (Atm (d, w)) = Atm ∘ (d,) <$> handleEvent ev w
     atom_focus                         = const
     atom_unfocus                       = id
 
@@ -216,7 +226,7 @@ instance Functor (Reaction af) where
     fmap f (Spawn o ma)        = Spawn o $ fmap f ma
     fmap _ (PushMolecule m)    = PushMolecule m
 
-(<||>) ∷ [Reaction af r] → B.EventM [Reaction af r] → B.EventM [Reaction af r]
+(<||>) ∷ [Reaction af r] → EventM [Reaction af r] → EventM [Reaction af r]
 x <||> ya = case x of
               [] → ya
               _  → pure x
@@ -257,8 +267,8 @@ molecule_atom_at ∷ IsAF af ⇒ Mol af → Address af → AtmF af
 molecule_atom_at Mol{..} addr = flip fromMaybe (HM.lookup addr molecule_map)
                               $ error $ printf "No AtmF at address '%s'." (show addr)
 
-atom_try_handle_event ∷ Mol af → VT.Event → Bool → KeySpec → AtmF af → B.EventM [Reaction af (AtmF af)]
-atom_try_handle_event mol ev@(VT.EvKey _ _) focused kspec (AtmF a) =
+atom_try_handle_event ∷ Mol af → B.BrickEvent Name VT.Event → Bool → KeySpec → AtmF af → EventM [Reaction af (AtmF af)]
+atom_try_handle_event mol ev focused kspec (AtmF a) =
     if atom_event_filter a focused ev
     then do let handler = (flip fromMaybe) ((^. _2) <$> (find ((≡ kspec) ∘ (^. _1)) $ atom_handlers a))
                           $ error $ printf "Internal invariant failed:  AtmF has no binding for key, whereas by 'molecule_handling_addr' it should."
@@ -275,7 +285,7 @@ molecule_clear_addr addr mol@Mol{..} = mol { molecule_map = HM.delete addr molec
 molecule_set_focus ∷ Address af → Mol af → Mol af
 molecule_set_focus addr mol = mol { molecule_focus = addr }
 
-molecule_try_handle_event_with_keyspec_at ∷ VT.Event → KeySpec → Address af → Mol af → B.EventM [Reaction af (AtmF af)]
+molecule_try_handle_event_with_keyspec_at ∷ B.BrickEvent Name VT.Event → KeySpec → Address af → Mol af → EventM [Reaction af (AtmF af)]
 molecule_try_handle_event_with_keyspec_at ev kspec addr mol@Mol{..} =
     case HM.lookup addr molecule_map of
       Just atom → atom_try_handle_event mol ev (molecule_focus ≡ addr) kspec atom
@@ -324,7 +334,7 @@ instance Show (Effect mol a) where
     show (ReplaceM _) = "ReplaceM"
     show (PushM _)    = "PushM"
 
-molecule_effect_of_reaction ∷ Molecule mol a ⇒ Reaction (AFOf mol) (Address (AFOf mol), AtmF (AFOf mol)) → Mol (AFOf mol) → B.EventM (Effect mol a)
+molecule_effect_of_reaction ∷ Molecule mol a ⇒ Reaction (AFOf mol) (Address (AFOf mol), AtmF (AFOf mol)) → Mol (AFOf mol) → EventM (Effect mol a)
 molecule_effect_of_reaction (Update        (srcaddr, atom)) m = pure ∘ ReplaceM $ molecule_update_addr srcaddr atom m
 molecule_effect_of_reaction (Change        (srcaddr, atom)) m = pure ∘ ReplaceM $ molecule_recompose_event_route $ molecule_update_addr srcaddr atom m
 molecule_effect_of_reaction (Disappear     (srcaddr, _))    m = pure ∘ ReplaceM $ molecule_remove_atom srcaddr m
@@ -342,7 +352,7 @@ molecules_apply_effect m ms eff =
       ReplaceM m' → (Just m', ms)
       PushM    m' → (Nothing, m' : MolF m : ms)
 
-molecules_apply_reactions ∷ ∀ mol a. Molecule mol a ⇒ Mol (AFOf mol) → [MolF] → [Reaction (AFOf mol) (Address (AFOf mol), AtmF (AFOf mol))] → B.EventM [MolF]
+molecules_apply_reactions ∷ ∀ mol a. Molecule mol a ⇒ Mol (AFOf mol) → [MolF] → [Reaction (AFOf mol) (Address (AFOf mol), AtmF (AFOf mol))] → EventM [MolF]
 molecules_apply_reactions m ms [] = pure $ MolF m : ms
 molecules_apply_reactions m ms (r:rs) = do
   eff ← molecule_effect_of_reaction r m
@@ -358,8 +368,8 @@ global_keybinding_effects (Key VT.KEsc) (MolF   Mol{..} : []) | Nothing ← mole
 global_keybinding_effects (Key VT.KEsc) (MolF m@Mol{..} : _)  | Just _  ← molecule_popup = Just ∘ ReplaceMF ∘ MolF $ m { molecule_popup = Nothing }
 global_keybinding_effects _             _                                                = Nothing
 
-molecules_handle_weak_global_keybindings ∷ VT.Event → [MolF] → [MolF]
-molecules_handle_weak_global_keybindings (VT.EvKey k mods) ms@(molf@(MolF mol@Mol{..}) : rest) =
+molecules_handle_weak_global_keybindings ∷ B.BrickEvent Name VT.Event → [MolF] → [MolF]
+molecules_handle_weak_global_keybindings (B.VtyEvent (VT.EvKey k mods)) ms@(molf@(MolF mol@Mol{..}) : rest) =
     if | k ≡ VT.KChar 'h' ∧ mods ≡ [VT.MMeta]
            → (:rest) $ molecule_set_popup "Key bindings:" molf $ molecule_help molf
        | k ≡ molecule_key_prev ∨ k ≡ molecule_key_next
@@ -380,8 +390,8 @@ molecules_handle_weak_global_keybindings (VT.EvKey k mods) ms@(molf@(MolF mol@Mo
            → ms
 molecules_handle_weak_global_keybindings _ev mols = mols
 
-molecules_handle_event ∷ [MolF] → VT.Event → B.EventM (B.Next [MolF])
-molecules_handle_event mols@(MolF mol@Mol{..}:_) ev@(VT.EvKey k ms) = do
+molecules_handle_event ∷ [MolF] → B.BrickEvent Name VT.Event → EventM (B.Next [MolF])
+molecules_handle_event mols@(MolF mol@Mol{..}:_) ev@(B.VtyEvent (VT.EvKey k ms)) = do
   let try_handle_by_addr kspec addr acc = do
         reply ← molecule_try_handle_event_with_keyspec_at ev kspec addr mol
         case reply of
@@ -410,7 +420,7 @@ molecule_atoms Mol{..} = HM.toList molecule_map
 molecule_set_popup ∷ String → MolF → [String] → MolF
 molecule_set_popup title (MolF mol) msg = MolF mol { molecule_popup = Just (title, msg) }
 
-molecule_render ∷ IsAF af ⇒ Mol af → [B.Widget]
+molecule_render ∷ IsAF af ⇒ Mol af → [B.Widget Name]
 molecule_render mol@Mol{..} =
     -- map (str ∘ intercalate ", " ∘ reverse) (take 5 $ _molecule_log) <> [str "---"] <>
     [ maybe_with_viewport
@@ -421,7 +431,7 @@ molecule_render mol@Mol{..} =
       $ sortBy (compare `on` fst)
       $ molecule_atoms mol ]
     where
-      maybe_with_viewport | molecule_needs_viewport = B.viewport (B.Name $ "MoleculeViewport" <> (show molecule_focus)) B.Vertical
+      maybe_with_viewport | molecule_needs_viewport = B.viewport (Name $ "MoleculeViewport" <> molecule_title) B.Vertical
                           | otherwise               = id
 
 with_molecule_atom ∷ ∀ a af res. (Atom a, IsAF af) ⇒ Mol af → Address af → (a → res) → res

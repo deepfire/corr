@@ -17,7 +17,7 @@ executable corr
   build-depends:       aeson >= 0.9
                      , base >=4.8
                      , base-unicode-symbols >=0.2
-                     , brick >= 0.5
+                     , brick >= 0.17
                      , bytestring >=0.10
                      , cassava >= 0.4
                      , containers >= 0.5

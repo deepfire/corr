@@ -83,16 +83,16 @@ run ∷ [MolF] → IO [MolF]
 run = B.defaultMain app
 
 -- * Vty/Brick utilities
-vty_evkey_remap ∷ [(VT.Key, VT.Key)] → VT.Event → VT.Event
-vty_evkey_remap keymap ev@(VT.EvKey from mods) =
+vty_evkey_remap ∷ [(VT.Key, VT.Key)] → B.BrickEvent Name VT.Event → B.BrickEvent Name VT.Event
+vty_evkey_remap keymap ev@(B.VtyEvent (VT.EvKey from mods)) =
     case lookup from keymap of
       Nothing  → ev
-      Just to' → VT.EvKey to' mods
-vty_evkey_remap _ _ = error "Invariant failed:  request to remap a non-key event."
+      Just to' → B.VtyEvent (VT.EvKey to' mods)
+vty_evkey_remap _ _ = error "Invariant failed:  request to remap a non-vty/non-key event."
 
-mkEnumRadio ∷ (Bounded a, Enum a) ⇒ Maybe String → (a → (String, a)) → Int → B.Radio a
-mkEnumRadio mtitle labelfn choice' =
-    B.radio (B.Name "") mtitle $ Just (choice', map labelfn $ enumFrom minBound)
+mkEnumRadio ∷ (Bounded a, Enum a) ⇒ String → (a → (String, a)) → Int → B.Radio Name a
+mkEnumRadio title labelfn choice' =
+    B.radio (Name title) (Just title) $ Just (choice', map labelfn $ enumFrom minBound)
 enumRadioLabel ∷ Show a ⇒ Int → a → (String, a)
 enumRadioLabel dropchars m = (drop dropchars $ show m, m)
 
@@ -100,32 +100,32 @@ class BrickSelector a where
     selector_index       ∷ a → Maybe Int
     selector_upper_bound ∷ a → Int
     selector_lower_bound ∷ a → Int
-instance BrickSelector (B.List a) where
+instance BrickSelector (B.List Name a) where
     selector_index       = B.listSelected
     selector_lower_bound = const 0
     selector_upper_bound = (\x → x - 1) ∘ V.length ∘ B.listElements
-instance BrickSelector (Table a b) where
+instance BrickSelector (Table n a b) where
     selector_index       = tableSelRowIx
     selector_lower_bound = const 0
     selector_upper_bound = (\x → x - 1) ∘ V.length ∘ tableVisibleRows
 
-brick_selector_updown_event_at_boundary ∷ BrickSelector a ⇒ VT.Event → a → Bool
+brick_selector_updown_event_at_boundary ∷ BrickSelector a ⇒ B.BrickEvent Name VT.Event → a → Bool
 brick_selector_updown_event_at_boundary key w =
     case key of
-      VT.EvKey VT.KUp   [] | Just x ← selector_index w → x > selector_lower_bound w
-      VT.EvKey VT.KDown [] | Just x ← selector_index w → x < selector_upper_bound w
+      B.VtyEvent (VT.EvKey VT.KUp   []) | Just x ← selector_index w → x > selector_lower_bound w
+      B.VtyEvent (VT.EvKey VT.KDown []) | Just x ← selector_index w → x < selector_upper_bound w
       _ → False
 
-with_updated_attrmap ∷ B.Widget → [(B.AttrName, VT.Attr)] → B.Widget
+with_updated_attrmap ∷ B.Widget Name → [(B.AttrName, VT.Attr)] → B.Widget Name
 with_updated_attrmap w override = B.updateAttrMap (B.applyAttrMappings override) w
 
-brick_hline, _brick_vline, _brick_hspace, _brick_vspace ∷ B.Widget
+brick_hline, _brick_vline, _brick_hspace, _brick_vspace ∷ B.Widget Name
 brick_hline  = vLimit 1 $ fill '─'
 _brick_vline  = hLimit 1 $ fill '│'
 _brick_hspace = vLimit 1 $ fill ' '
 _brick_vspace = hLimit 1 $ fill ' '
 
-brick_titled_separator ∷ B.AttrName → String → B.Widget
+brick_titled_separator ∷ B.AttrName → String → B.Widget Name
 brick_titled_separator attr title_ = str "───* " <+> B.withAttr attr (str title_) <+> str " *─" <+> brick_hline
 
 
@@ -149,20 +149,23 @@ pprint_work_multiline fws work =
 data               WT = WTSet | WTExpr | WTTable deriving (IsAF, Enum, Eq, Generic, Hashable, Ord, Show)
 instance Molecule (Mol WT) (BranchSetKind, Worksets)
 
-type               BSSwitch = Atm (BranchSetKind, B.Radio BranchSetKind)
+instance HandleEvent (B.Radio Name a) where
+  handleEvent = B.handleEventRadio
+
+type               BSSwitch = Atm (BranchSetKind, B.Radio Name BranchSetKind)
 type instance AFOf BSSwitch = WT
 instance Atom      BSSwitch where
     type Data      BSSwitch = BranchSetKind
-    type Widget    BSSwitch = B.Radio BranchSetKind
-    derive_atom kind         = Atm (kind, mkEnumRadio (Just "branch set") (enumRadioLabel 0) (fromEnum kind))
+    type Widget    BSSwitch = B.Radio Name BranchSetKind
+    derive_atom kind         = Atm (kind, mkEnumRadio "branch set" (enumRadioLabel 0) (fromEnum kind))
     atom_event_filter _ fd _ = fd
     atom_handlers _          =
         [ (Key VT.KLeft,  handle, "previous branch set")
         , (Key VT.KRight, handle, "next branch set") ]
         where handle ∷ Handler WT BSSwitch
               handle = \mol ev (Atm (_bsk, w)) →
-                       do w' ← B.handleEvent (vty_evkey_remap [ (VT.KRight,  VT.KChar '\t')
-                                                              , (VT.KLeft,   VT.KBackTab) ] ev) w
+                       do w' ← handleEvent (vty_evkey_remap [ (VT.KRight,  VT.KChar '\t')
+                                                            , (VT.KLeft,   VT.KBackTab) ] ev) w
                           -- XXX:  van Laarhoeven lens this! (?)
                           let addr = APt WTTable
                               bsk  = fromMaybe def $ B.radioSelection w'
@@ -181,18 +184,21 @@ filterHeadAttr, filterHeadAttrS ∷ B.AttrName
 filterHeadAttr  = "flthead"
 filterHeadAttrS = "fltheadS"
 
-type               FEditor  = Atm ((), B.Editor)
+instance (Eq t, Monoid t) ⇒ HandleEvent (B.Editor t Name) where
+  handleEvent (B.VtyEvent ev) = B.handleEditorEvent ev
+
+type               FEditor  = Atm (Name, B.Editor String Name)
 type instance AFOf FEditor  = WT
 instance Atom      FEditor  where
-    type Data      FEditor  = ()
-    type Widget    FEditor  = B.Editor
-    derive_atom _            = Atm ((), B.editor (B.Name "") (str ∘ unlines) (Just 1) "")
+    type Data      FEditor  = Name
+    type Widget    FEditor  = B.Editor String Name
+    derive_atom name        = Atm (name, B.editor name (str ∘ unlines) (Just 1) "")
     atom_event_filter _ _ _  = True
     atom_handlers _          =
         [ (CharKeys,   handle, "edit filter")
         , (Key VT.KBS, handle, "edit filter") ]
-        where handle = \mol ev (Atm (_, w)) →
-                       do w' ← B.handleEvent ev w
+        where handle = \mol ev (Atm (name, w)) →
+                       do w' ← handleEvent ev w
                           let filter_text = head $ B.getEditContents w'
                               filter_expr = filter (not ∘ null) $ splitOn " " filter_text
                               addr        = APt WTTable
@@ -200,10 +206,10 @@ instance Atom      FEditor  where
                           with_molecule_atom mol addr
                               (\(Atm ((kind, wsets, _oldvf), _) ∷ WTable) →
                                pure [ UpdateAt addr ∘ AtmF $ (derive_atom (kind, wsets, vf) ∷ WTable)
-                                    , Update        ∘ AtmF $ Atm ((), w') ])
+                                    , Update        ∘ AtmF $ Atm (name, w') ])
     render_atom focused (Atm (_, w)) =
         (B.withAttr (if focused then filterHeadAttrS else filterHeadAttr)
-         $ str "-->") <+> str " " <+> B.renderEditor w
+         $ str "-->") <+> str " " <+> B.renderEditor focused w
 
 worktable_fields ∷ [WSColumn]
 worktable_fields = [ WSC SIssue, WSC SBranch, WSC SCommitter, WSC SCommitted, WSC SState, WSC SAssignee, WSC SWG ]
@@ -218,22 +224,24 @@ instance Fieldy WorktableEntry WSColumn where
     compare_rows  WSC{..} = compare `on` work_field unwrap ∘ view _1
     default_order         = field_default_order
 
-type               WTable   = Atm ((BranchSetKind, Worksets, WorktableEntry → Bool), Table WorktableEntry WSColumn)
+instance Fieldy r c ⇒ HandleEvent (Table Name r c) where
+  handleEvent = handleEventTable
+
+type               WTable   = Atm ((BranchSetKind, Worksets, WorktableEntry → Bool), Table Name WorktableEntry WSColumn)
 type instance AFOf WTable   = WT
 instance Atom      WTable   where
     type Data      WTable   = (BranchSetKind, Worksets, WorktableEntry → Bool)
-    type Widget    WTable   = Table WorktableEntry WSColumn
+    type Widget    WTable   = Table Name WorktableEntry WSColumn
     derive_atom dat@(bsk, wsets, visflt) =
         Atm ( dat
-            , table
-              (B.Name "")
+            , table (Name "")
               [ (drop 1 $ show vc, field_width_specifier cw, cw)
               | cw@(WSC vc) ← worktable_fields ]
               def
               visflt
               [ (w, pprint_work_oneline worktable_fields w)
               | w ← kind_set bsk wsets ] )
-    atom_event_filter (Atm (_, w)) fd ev@(VT.EvKey k []) | k ≡ VT.KLeft ∨ k ≡ VT.KRight = fd
+    atom_event_filter (Atm (_, w)) fd ev@(B.VtyEvent (VT.EvKey k [])) | k ≡ VT.KLeft ∨ k ≡ VT.KRight = fd
                                                          | k ≡ VT.KUp   ∨ k ≡ VT.KDown  = brick_selector_updown_event_at_boundary ev w
     atom_event_filter _            _  _                                                 = True
     atom_handlers  _         =
@@ -245,7 +253,7 @@ instance Atom      WTable   where
         , (Key VT.KPageUp,   handle, "one screen upwards")
         , (Key VT.KPageDown, handle, "one screen downwards") ]
         where handle = \_ ev (Atm (_dat, w)) →
-                       (:[]) ∘ Update ∘ AtmF ∘ Atm ∘ (_dat,) <$> flip B.handleEvent w
+                       (:[]) ∘ Update ∘ AtmF ∘ Atm ∘ (_dat,) <$> flip handleEvent w
                                  (vty_evkey_remap [ (VT.KRight,  VT.KChar '\t')
                                                   , (VT.KLeft,   VT.KBackTab) ] ev)
               enter  = \_ _  (Atm (_, w)) →
@@ -275,30 +283,33 @@ instance Atom      WTable   where
 data               WV = WVIssue | WVComment deriving (IsAF, Enum, Eq, Generic, Hashable, Ord, Show)
 instance Molecule (Mol WV) (Work, [Comment])
 
-type               IView = Atm (Work, B.List String)
+instance HandleEvent (B.List Name String) where
+  handleEvent (B.VtyEvent ev) = B.handleListEvent ev
+
+type               IView = Atm (Work, B.List Name String)
 type instance AFOf IView = WV
 instance Atom      IView where
     type Data      IView = Work
-    type Widget    IView = B.List String
-    derive_atom work     = Atm (work, B.list (B.Name "") (V.fromList ∘ lines $ pprint_work_multiline all_fields work) 1)
+    type Widget    IView = B.List Name String
+    derive_atom work     = Atm (work, B.list (Name "") (V.fromList ∘ lines $ pprint_work_multiline all_fields work) 1)
     atom_event_filter (Atm (_, w)) _ k =
         brick_selector_updown_event_at_boundary k w
     atom_handlers _      =
         [ (Key VT.KUp,   handle, "previous issue field -or- comment")
         , (Key VT.KDown, handle, "next issue field -or- comment") ]
-        where handle _mol ev (Atm (dat, w)) = (:[]) ∘ Update ∘ AtmF ∘ Atm ∘ (dat,) <$> B.handleEvent ev w
+        where handle _mol ev (Atm (dat, w)) = (:[]) ∘ Update ∘ AtmF ∘ Atm ∘ (dat,) <$> handleEvent ev w
     atom_focus   (Atm (_dat, w)) LT  = Atm ∘ (_dat,) $ w & B.listSelectedL .~ Just ((length $ B.listElements w) - 1)
     atom_focus   (Atm (_dat, w)) _   = Atm ∘ (_dat,) $ w & B.listSelectedL .~ Just 0
     atom_unfocus (Atm (_dat, w))     = Atm ∘ (_dat,) $ w & B.listSelectedL .~ Nothing
     render_atom focused (Atm (_, w)) =
         vLimit (1 + (V.length $ B.listElements w))
-        $ B.renderList (w & if focused then id
+        $ B.renderList (const str) focused
+                       (w & if focused then id
                             else B.listSelectedL .~ Nothing)
-        $ const str
 
-instance B.HandleEvent ()       where
+instance HandleEvent ()       where
     handleEvent _ = pure
-instance B.HandleEvent B.Widget where
+instance HandleEvent (B.Widget Name) where
     handleEvent _ = pure
 
 type               IComment = Atm (Comment, ())
@@ -331,36 +342,36 @@ mkCommentPost ∷ Issue → LocalTime → String → Comment
 mkCommentPost comm_issue@Issue{..} comm_created comm_text =
     let comm_author  = the_project_accessor_for issue_project $ "comment on issue %s" <> issue_idstr comm_issue
         comm_updated = Nothing
-    in Comment{..}
+    in Comment{..} -- XXX: comm_id
 
-type                IReply = Atm (Comment, B.Editor)
+type                IReply = Atm (Comment, B.Editor String Name)
 type instance  AFOf IReply = WV
 instance Atom       IReply where
     type Data       IReply = Comment
-    type Widget     IReply = B.Editor
-    derive_atom (c@Comment{..}) = Atm (c, B.editor (B.Name "") (str ∘ unlines) (Just 10) -- XXX:  arbitrary editor height limit!
+    type Widget     IReply = B.Editor String Name
+    derive_atom (c@Comment{..}) = Atm (c, B.editor (Name $ "reply-to" <> comm_text) (str ∘ unlines) (Just 10) -- XXX:  arbitrary editor height limit!
                                           $ "@" <> (fromMLogin ∘ member_login $ comm_author) <> ", ")
     atom_handlers self     =
         [ (Key    VT.KEsc,              handle, "cancel current comment posting")
         , (ModKey VT.KEnter [VT.MMeta], handle, "post reply")
         , (CharKeys,                    handle, "edit reply")
         , (NonCharKeys,                 handle, "edit reply") ]
-        where handle _mol (VT.EvKey VT.KEnter [VT.MMeta]) (Atm (Comment{..}, w)) =
+        where handle _mol (B.VtyEvent (VT.EvKey VT.KEnter [VT.MMeta])) (Atm (Comment{..}, w)) =
                   do time ← liftIO $ fmap (utcToLocalTime (hoursToTimeZone 3)) getCurrentTime
                      let comment = mkCommentPost comm_issue time (concat $ B.getEditContents w)
                      liftIO $ issue_post_comment comm_issue comment
                             -- XXX:  queue an update instead of Change -- more honest that way (albeit less fluid..)
                      pure [ Change (AtmF $ (derive_atom comment ∷ IComment) ∷ AtmF (AFOf IComment)) ]
-              handle _mol (VT.EvKey VT.KEsc []) _ =
+              handle _mol (B.VtyEvent (VT.EvKey VT.KEsc [])) _ =
                   pure [ Disappear (AtmF self) ]
               handle _mol ev a = handle_editor ev a
-              handle_editor ev (Atm (c,w)) = (:[]) ∘ Update ∘ AtmF ∘ Atm ∘ (c,) <$> B.handleEvent ev w
+              handle_editor ev (Atm (c,w)) = (:[]) ∘ Update ∘ AtmF ∘ Atm ∘ (c,) <$> handleEvent ev w
     render_atom focused (Atm (Comment{..}, w)) =
         (brick_titled_separator (if focused then commentHeadAttrS else commentHeadAttr)
          $ printf "replying to %s  %s"
                (printFullNameEastern ∘ fromMFullName ∘ member_fullname $ comm_author)
                (show $ fromMaybe comm_created comm_updated))
-        <=> B.renderEditor w
+        <=> B.renderEditor focused w
 
 
 vtaCyanFG, vtaInvCyanBG, vtaInvWhiteBG, vtaDimFG, vtaPlain ∷ VT.Attr
@@ -370,14 +381,13 @@ vtaInvWhiteBG = bg VT.white
 vtaDimFG      = VT.defAttr `VT.withStyle` VT.bold
 vtaPlain      = VT.defAttr
 
-app ∷ B.App [MolF] VT.Event
+app ∷ B.App [MolF] VT.Event Name
 app = B.App
-      { B.appLiftVtyEvent = id
-      , B.appStartEvent   = pure
+      { B.appStartEvent   = pure
       , B.appHandleEvent  = molecules_handle_event
       , B.appDraw         = \case
-                            []           → [] -- XXX:  this "cannot" happen and makes Brick raise an error
-                            (MolF gr : _) → molecule_draw gr
+          []            → [] -- XXX:  this "cannot" happen and makes Brick raise an error
+          (MolF gr : _) → molecule_draw gr
       --
       , B.appChooseCursor = B.showFirstCursor -- XXX:  this is where the cursor is chosen
       , B.appAttrMap      = const $ B.attrMap VT.defAttr

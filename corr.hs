@@ -428,7 +428,7 @@ action_handler CorrCtx{..} (CmdExec iiid cmd) = do
 action_handler CorrCtx{..} CmdUI = do
   let g = molecule "Available work" (VT.KBackTab, VT.KChar '\t') False
           [ (APt WTSet,   AtmF (derive_atom def                      ∷ BSSwitch))
-          , (APt WTExpr,  AtmF (derive_atom ()                       ∷ FEditor))
+          , (APt WTExpr,  AtmF (derive_atom (Name "<inputbar>")      ∷ FEditor))
           , (APt WTTable, AtmF (derive_atom (def, wsets, const True) ∷ WTable)) ]
   _ ← UI.run $
       case yt_failure of

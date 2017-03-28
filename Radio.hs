@@ -8,9 +8,10 @@ module Radio
   , radioName
   , radioButtons
   , radioSelectedIndex
-  -- * Construction and rendering
+  -- * Construction, rendering, events
   , radio
   , renderRadio
+  , handleEventRadio
   -- * Getting a radio's current value
   , radioSelection
   -- * Attributes
@@ -46,36 +47,28 @@ import Brick.AttrMap
 --
 -- * Tab: selecte the next button
 -- * Shift-tab: select the previous button
-data Radio a =
-    Radio { radioName :: Name
-           -- ^ The radio name
-           , radioTitle :: Maybe String
-           -- ^ The radio title
-           , radioButtons :: [(String, a)]
-           -- ^ The radio button labels and values
-           , radioSelectedIndex :: Maybe Int
-           -- ^ The currently selected radio button index (if any)
-           }
+data Radio n a =
+    Radio { radioName          :: n             -- ^ The radio name
+          , radioTitle         :: Maybe String  -- ^ The radio title
+          , radioButtons       :: [(String, a)] -- ^ The radio button labels and values
+          , radioSelectedIndex :: Maybe Int     -- ^ The currently selected radio button index (if any)
+          }
 
 suffixLenses ''Radio
 
-instance HandleEvent (Radio a) where
-    handleEvent ev d =
-        case ev of
-            EvKey (KChar '\t') [] -> return $ nextButtonBy 1 d
-            EvKey KBackTab [] -> return $ nextButtonBy (-1) d
-            _ -> return d
+handleEventRadio ev d =
+    case ev of
+        VtyEvent (EvKey (KChar '\t') []) -> pure $ nextButtonBy 1 d
+        VtyEvent (EvKey KBackTab [])     -> pure $ nextButtonBy (-1) d
+        _ -> pure d
 
 -- | Create a radio.
-radio :: Name
-       -- ^ The radio name, provided so that you can use this as a
-       -- basis for viewport names in the radio if desired
-       -> Maybe String
-       -- ^ The radio title
-       -> Maybe (Int, [(String, a)])
-       -- ^ The currently-selected button index (starting at zero) and
-       -- the button labels and values to use
-       -> Radio a
+radio ::  n                          -- ^ The radio name, provided so that you can use this as a
+                                     --   basis for viewport names in the radio if desired
+       -> Maybe String               -- ^ The radio title
+       -> Maybe (Int, [(String, a)]) -- ^ The currently-selected button index (starting at zero) and
+                                     --   the button labels and values to use
+       -> Radio n a
 radio name title buttonData =
     let (buttons, idx) = case buttonData of
           Nothing -> ([], Nothing)
@@ -96,7 +89,7 @@ buttonSelectedAttr :: AttrName
 buttonSelectedAttr = buttonAttr <> "selected"
 
 -- | Render a radio
-renderRadio :: Radio a -> Widget
+renderRadio :: Radio n a -> Widget n
 renderRadio d =
     let buttonPadding = str ""
         mkButton (i, (s, _)) = let att = if Just i == d^.radioSelectedIndexL
@@ -112,7 +105,7 @@ renderRadio d =
        withDefAttr radioAttr $
        buttons
 
-nextButtonBy :: Int -> Radio a -> Radio a
+nextButtonBy :: Int -> Radio n a -> Radio n a
 nextButtonBy amt d =
     let numButtons = length $ d^.radioButtonsL
     in if numButtons == 0 then d
@@ -123,7 +116,7 @@ nextButtonBy amt d =
 -- | Obtain the value associated with the radio's currently-selected
 -- button, if any. This function is probably what you want when someone
 -- presses 'Enter' in a radio.
-radioSelection :: Radio a -> Maybe a
+radioSelection :: Radio n a -> Maybe a
 radioSelection d =
     case d^.radioSelectedIndexL of
         Nothing -> Nothing
