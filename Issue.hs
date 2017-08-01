@@ -20,9 +20,11 @@ import           Prelude.Unicode
 import           Test.QuickCheck
 
 
+import           Tabu.Supplementary
+
+
 -- * Local imports
 import           Git
-import           Supplementary
 import           Youtrack          hiding (Field, State, Tag)
 import qualified Youtrack              as Y
 
@@ -32,6 +34,13 @@ instance Arbitrary PAlias      where arbitrary  = PAlias      <$> fmap (fmap toU
 instance Arbitrary PName       where arbitrary  = PName       <$> arbitrary_capitalised
 instance Arbitrary Summary     where arbitrary  = Summary     <$> arbitrary_sentence
 instance Arbitrary Description where arbitrary  = Description <$> arbitrary_sentence
+
+instance Default   MLogin      where def        = MLogin "anonymous"
+instance Arbitrary MLogin      where arbitrary  = MLogin <$> arbitrary_loweralpha
+instance Default   MFullName   where def        = MFullName def
+instance Arbitrary MFullName   where arbitrary  = MFullName <$> arbitrary
+instance Default   Member      where def        = Member def def
+instance Arbitrary Member      where arbitrary  = Member <$> arbitrary <*> arbitrary
 instance Default   Summary     where def        = Summary     "<no-summary>"
 instance Default   Description where def        = Description "<no-description>"
 instance Show      Summary     where show       = show_squoted "summary"     ∘ fromSummary

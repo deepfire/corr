@@ -13,7 +13,9 @@ cabal-version:       >=1.10
 executable corr
   main-is:             corr.hs
   default-language:    Haskell2010
-  ghc-options:         -threaded
+
+  ghc-options:         -threaded -Wall
+
   build-depends:       aeson >= 0.9
                      , base >=4.8
                      , base-unicode-symbols >=0.2

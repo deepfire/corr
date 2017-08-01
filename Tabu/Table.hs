@@ -9,7 +9,7 @@
 
 -- | This module provides a simple table widget. You get to pick the
 -- table title, if any, as well as its columns.
-module Table
+module Tabu.Table
   ( Fieldy(..)
   -- , Fieldy'(..)
   -- , ColumnW(..)
@@ -138,6 +138,7 @@ order_rows field_switch col orderchoice rows =
     in (order
        ,sortBy comparator rows)
 
+handleEventTable ∷ (Ord n, Fieldy r c) ⇒ BrickEvent t1 t → Table n r c → EventM n (Table n r c)
 handleEventTable (VtyEvent (EvKey key [])) prew =
     let field_switched   = key ≡ KChar '\t'
         (reorder, w)     = case key of

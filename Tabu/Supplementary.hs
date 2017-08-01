@@ -35,24 +35,19 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Supplementary
+module Tabu.Supplementary
 where
 
 import           Control.Exception
 import qualified Control.Exception           as EX
 import           Data.Char                      (toTitle)
 import           Data.Data
-import           Data.Default                   (Default(..))
 import           Data.List
 import           Data.Monoid
-import           Data.Time.Calendar             (Day(..))
-import           Data.Time.LocalTime            (LocalTime(..), TimeOfDay(..))
 import           Debug.Trace                    (trace)
 import           Test.QuickCheck
 import qualified Text.Printf as P
 import           Prelude.Unicode
-
-import           Youtrack
 
 
 -- * Generic tools
@@ -117,29 +112,6 @@ strHasTokens (tok:xs) leltstr = case hayfindrest leltstr tok of
 show_unquoted, show_squoted ∷ String → String → String
 show_unquoted prefix s = prefix <> ":"  <> s
 show_squoted  prefix s = prefix <> ":'" <> s <> "'"
-
-
--- * Noisy instance code that was moved out of the way
-
-instance Arbitrary Day        where arbitrary = ModifiedJulianDay <$> choose (25000, 55000)
-instance Arbitrary TimeOfDay  where arbitrary = TimeOfDay  <$> arbitrary <*> arbitrary <*> arbitrary
-
-instance Default LocalTime    where def       = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
-instance Arbitrary LocalTime  where arbitrary = LocalTime  <$> arbitrary <*> arbitrary
-
-instance Default   FamilyName where def       = FamilyName "Invisible"
-
-instance Default   GivenName  where def       = GivenName "joe"
-
-instance Default   FullName   where def       = FullName def def
-
-instance Default   MLogin     where def       = MLogin "anonymous"
-instance Arbitrary MLogin     where arbitrary = MLogin <$> arbitrary_loweralpha
-instance Default   MFullName  where def       = MFullName def
-instance Arbitrary MFullName  where arbitrary = MFullName <$> arbitrary
-
-instance Default   Member     where def       = Member def def
-instance Arbitrary Member     where arbitrary = Member <$> arbitrary <*> arbitrary
 
 
 arbitrary_alphanum      ∷ Gen String

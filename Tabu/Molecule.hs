@@ -22,7 +22,7 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Molecule
+module Tabu.Molecule
     ( Address(..), AFOf, IsAF
     , Name(..)
     , EventM, HandleEvent(..)
@@ -65,7 +65,7 @@ import           Brick.Widgets.Core                  ( str
                                                      , vLimit, hLimit, vBox
                                                      )
 
-import           Supplementary
+import           Tabu.Supplementary
 
 
 -- | Address family
@@ -274,7 +274,6 @@ atom_try_handle_event mol ev focused kspec (AtmF a) =
                           $ error $ printf "Internal invariant failed:  AtmF has no binding for key, whereas by 'molecule_handling_addr' it should."
             handler mol ev a
     else pure []
-atom_try_handle_event _ _ignored _ _ _ = pure []
 
 molecule_update_addr ∷ IsAF af ⇒ Address af → AtmF af → Mol af → Mol af
 molecule_update_addr addr atom mol@Mol{..} = mol { molecule_map = HM.insert addr atom molecule_map }

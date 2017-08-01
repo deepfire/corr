@@ -68,12 +68,16 @@ import qualified Data.Vector                      as V
 import qualified Graphics.Vty                     as VT
 
 
--- Local imports
-import           Columns
-import           Molecule
-import qualified Radio                            as B
-import           Supplementary
-import           Table
+-- * Tabu
+import           Tabu.Columns
+import           Tabu.Molecule
+import qualified Tabu.Radio                       as B
+import           Tabu.Supplementary
+import           Tabu.Table                       as T
+
+
+-- * Local imports
+import           YTColumns
 import           Work
 import           Youtrack                     hiding (Field, State, Tag)
 import           Youtrack.Extras
@@ -275,7 +279,7 @@ instance Atom      WTable   where
             B.render ∘ B.vLimit h
              $ with_updated_attrmap (renderTable w)
              $ if not focused then []
-               else [(Table.tableColumnSelectedAttr, vtaInvWhiteBG)]
+               else [(T.tableColumnSelectedAttr, vtaInvWhiteBG)]
 
 
 -- * Corr UI: work view screen
@@ -396,8 +400,8 @@ app = B.App
                             , (B.buttonSelectedAttr,            vtaInvCyanBG)
                             , (filterHeadAttr,                  vtaPlain)
                             , (filterHeadAttrS,                 vtaInvWhiteBG)
-                            , (Table.tableColumnSelectedAttr,   vtaInvCyanBG)
-                            , (Table.tableRowSelectedAttr,      vtaCyanFG)
+                            , (T.tableColumnSelectedAttr,       vtaInvCyanBG)
+                            , (T.tableRowSelectedAttr,          vtaCyanFG)
                             -- Workview
                             , (B.listSelectedAttr,              vtaCyanFG)
                             , (commentHeadAttr,                 vtaPlain)

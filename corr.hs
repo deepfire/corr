@@ -98,12 +98,14 @@ import           System.IO.Unsafe                    (unsafePerformIO)
 --import           Network.Wreq                        (FormParam((:=)))
 
 
+import           Tabu.Molecule
+import           Tabu.Supplementary
+
+
 -- Local imports
-import           Columns
+import           YTColumns
 import           Git
-import           Molecule
 import           Report
-import           Supplementary
 import           UI
 import           Work
 import           Youtrack                     hiding (Field, State, Tag)

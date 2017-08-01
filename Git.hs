@@ -32,6 +32,7 @@
 -- {-# LANGUAGE UndecidableSuperClasses #-} 8.0
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Git where
 
@@ -44,7 +45,6 @@ import           Control.Monad.Catch (MonadMask)
 import           Control.Monad.Reader (MonadIO)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 
-import           Data.Default
 import           Data.Hashable (Hashable)
 import qualified Data.HashMap.Lazy as HM
 import           Data.List
@@ -53,6 +53,9 @@ import           Data.Monoid
 import           Data.Tagged (Tagged (..))
 import qualified Data.Text as T
 import           Data.Time.LocalTime (LocalTime(..), zonedTimeToLocalTime)
+import           Data.Default                   (Default(..))
+import           Data.Time.Calendar             (Day(..))
+import           Data.Time.LocalTime            (TimeOfDay(..))
 
 import           Git.Libgit2 (lgFactory)
 import           Git.Libgit2.Types
@@ -65,8 +68,10 @@ import           Test.QuickCheck
 import qualified Text.Printf as P
 
 
+import           Tabu.Supplementary
+
+
 import           Youtrack.Names
-import           Supplementary
 
 
 type family   GitMonad (m ∷ * → *) r ∷ Constraint
@@ -145,6 +150,21 @@ instance Arbitrary Branch     where arbitrary = Branch
                                                 <$> (fmap show) (arbitrary ∷ Gen FullName)
                                                 <*> (fmap show) (arbitrary ∷ Gen FullName)
                                                 <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+
+-- * Noisy instance code that was moved out of the way
+
+instance Arbitrary Day        where arbitrary = ModifiedJulianDay <$> choose (25000, 55000)
+instance Arbitrary TimeOfDay  where arbitrary = TimeOfDay  <$> arbitrary <*> arbitrary <*> arbitrary
+
+instance Default LocalTime    where def       = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
+instance Arbitrary LocalTime  where arbitrary = LocalTime  <$> arbitrary <*> arbitrary
+
+instance Default   FamilyName where def       = FamilyName "Invisible"
+
+instance Default   GivenName  where def       = GivenName "joe"
+
+instance Default   FullName   where def       = FullName def def
 
 mkMissingBranch ∷ RefName → Branch
 mkMissingBranch branchname =

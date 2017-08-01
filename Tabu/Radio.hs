@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | This module provides a simple radio widget. You get to pick the
 -- radio title, if any, as well as its buttons.
-module Radio
+module Tabu.Radio
   ( Radio
   , radioTitle
   , radioName
@@ -56,6 +56,7 @@ data Radio n a =
 
 suffixLenses ''Radio
 
+handleEventRadio :: Applicative f => BrickEvent t1 t -> Radio n a -> f (Radio n a)
 handleEventRadio ev d =
     case ev of
         VtyEvent (EvKey (KChar '\t') []) -> pure $ nextButtonBy 1 d

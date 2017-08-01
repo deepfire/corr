@@ -44,10 +44,11 @@ let
   });
 
   ###
-  nakeDrv = ghc.callPackage (import ./.) {};
-  drv = (haskell.lib.addBuildTools nakeDrv
-         [ pkgs.cabal-install
-           pkgs.stack
-           ghc.intero
-         ]);
-in if pkgs.lib.inNixShell then drv.env else drv
+  drv     = ghc.callPackage (import ./.) {};
+  drv'    = pkgs.haskell.lib.overrideCabal
+            drv
+            (old: {
+              libraryHaskellDepends =
+                 [ pkgs.cabal-install pkgs.stack ghc.intero ];
+             });
+in if pkgs.lib.inNixShell then drv'.env else drv'

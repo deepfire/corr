@@ -13,7 +13,7 @@ import           System.IO.Unsafe                    (unsafeInterleaveIO)
 
 
 -- Local imports
-import           Columns
+import           YTColumns
 import           Youtrack                     hiding (Field, State, Tag)
 import qualified Youtrack                         as Y
 
